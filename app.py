@@ -4,8 +4,7 @@
 import os
 import pickle
 
-from pyspark.ml import Model
-from pyspark.ml.classification import GBTClassifier
+from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import VectorAssembler, StringIndexer
 from pyspark.ml.regression import RandomForestRegressor
@@ -85,15 +84,16 @@ def train_model(dataframe: DataFrame):
 
     models = tvs.fit(train_df)
     best = models.bestModel
+    pipeline = Pipeline(stages=[best])
+    # Обучение конвейера на обучающих данных
+    p_model = pipeline.fit(train_df)
 
     # Оценка модели на тестовых данных
-    predictions = best.transform(test_data)
+    predictions = p_model.transform(test_data)
     evaluator = RegressionEvaluator(predictionCol='prediction', labelCol='price', metricName='rmse')
     rmse = evaluator.evaluate(predictions)
     print(f"RMSE: {rmse}")
-    best_model_params = best.extractParamMap()
-    print(f"Best model parameters: {best_model_params}")
-    return best
+    return p_model
 
 
 if __name__ == "__main__":
@@ -113,6 +113,6 @@ if __name__ == "__main__":
 
     df = df.drop('key', 'created_at').filter(col('city').isNotNull() & col('street').isNotNull())
     prepared_model = train_model(dataframe=df)
-    prepared_model.write().overwrite().save("/Users/iaroslavrussu/Dropbox/OTUS_project/pythonProject/models")
+    prepared_model.write().overwrite().save("./models")
 
     spark.stop()
