@@ -50,14 +50,15 @@ def build_tvs(lr) -> TrainValidationSplit:
     paramGrid = ParamGridBuilder() \
         .addGrid(lr.regParam, [0.1, 0.01]) \
         .addGrid(lr.fitIntercept, [False, True]) \
-        .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0]) \
+        .addGrid(lr.elasticNetParam, [0.0, 0.3, 1.0]) \
         .build()
 
     # Настройка TrainValidationSplit
     return TrainValidationSplit(estimator=lr,
-                                 estimatorParamMaps=paramGrid,
-                                 evaluator=RegressionEvaluator(labelCol="price", predictionCol="prediction", metricName="rmse"),
-                                 trainRatio=0.8)
+                                estimatorParamMaps=paramGrid,
+                                evaluator=RegressionEvaluator(labelCol="price", predictionCol="prediction",
+                                                              metricName="rmse"),
+                                trainRatio=0.8)
 
 
 def data_preparation(in_dataframe: DataFrame) -> DataFrame:
@@ -68,7 +69,7 @@ def data_preparation(in_dataframe: DataFrame) -> DataFrame:
     assembler = vector_assembler(
         features_columns=indexed_dataframe.columns,
     )
-    res_dataframe = assembler.transform(indexed_dataframe)  #.select('city_index', 'street_index', 'floor', 'rooms')
+    res_dataframe = assembler.transform(indexed_dataframe)
     return res_dataframe
 
 
@@ -112,6 +113,7 @@ if __name__ == "__main__":
     #       )
 
     df = df.drop('key', 'created_at').filter(col('city').isNotNull() & col('street').isNotNull())
+
     prepared_model = train_model(dataframe=df)
     prepared_model.write().overwrite().save("./models")
 
