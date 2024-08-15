@@ -33,7 +33,7 @@ def execute_model(model_path, dataframe):
 if __name__ == "__main__":
     spark = SparkSession.builder.appName("My App").getOrCreate()
     # Укажите путь к директории, где вы сохранили модель
-    model_path = "./models"  # Путь к директории, где сохранена модель
+    model_path = "../models"  # Путь к директории, где сохранена модель
 
     data = [
         (1, "Краснокамск", "Lenin Avenue", 18, 4, 4548908),

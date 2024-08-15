@@ -1,17 +1,14 @@
 """
 Модуль обучает модель на сохраненных за последний месяц данных
 """
-import os
-import pickle
 
 from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.feature import StringIndexer
 from pyspark.ml.regression import RandomForestRegressor
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
-from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import col
-from datetime import datetime, timedelta
+from pyspark.sql import DataFrame
+from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.feature import VectorAssembler
@@ -91,9 +88,17 @@ def train_model(dataframe: DataFrame):
 
     # Оценка модели на тестовых данных
     predictions = p_model.transform(test_data)
+    # Оценка RMSE
     evaluator = RegressionEvaluator(predictionCol='prediction', labelCol='price', metricName='rmse')
     rmse = evaluator.evaluate(predictions)
-    print(f"RMSE: {rmse}")
+    # Оценка MAE
+    evaluator_mae = RegressionEvaluator(predictionCol='prediction', labelCol='price', metricName='mae')
+    mae = evaluator_mae.evaluate(predictions)
+    # Оценка R²
+    evaluator_r2 = RegressionEvaluator(predictionCol='prediction', labelCol='price', metricName='r2')
+    r2 = evaluator_r2.evaluate(predictions)
+    print(f"RMSE: {rmse}, MAE: {mae}, R²: {r2}")
+
     return p_model
 
 
@@ -101,19 +106,19 @@ if __name__ == "__main__":
     running_date = datetime.now().date()
     spark = SparkSession.builder.getOrCreate()
 
-    from producer_emulator import *
-
+    # эмуляция данных
+    from application.producer_emulator import *
     streets_names = get_streets_names()
     cities_names = get_cities_names(spark_session=spark)
     df = (create_data(spark, cities=cities_names, streets=streets_names)
           .withColumn("key", monotonically_increasing_id())
           )
 
+    # Получение данных из Hive
     # df = (spark.table('FLATS_HIVE_TABLE').filter(col('created_at') > running_date - timedelta(weeks=4))
     #       )
 
     df = df.drop('key', 'created_at').filter(col('city').isNotNull() & col('street').isNotNull())
-
     prepared_model = train_model(dataframe=df)
     prepared_model.write().overwrite().save("./models")
 
