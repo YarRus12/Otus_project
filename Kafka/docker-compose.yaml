@@ -6,7 +6,7 @@ services:
     container_name: zookeeper
     networks:
       - kafka_network
-      - general_random_net
+      - general_net
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -18,7 +18,7 @@ services:
     container_name: kafka
     networks:
       - kafka_network
-      - general_random_net
+      - general_net
     depends_on:
       - zookeeper
     ports:
@@ -33,13 +33,33 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
       KAFKA_MIN_INSYNC_REPLICAS: '1'
 
+  database_stage:
+    build:
+      dockerfile: Dockerfile #нужен конкретный образ, с командами инициализации базы данных
+    environment:
+      POSTGRES_DB: docker_app_db
+      POSTGRES_USER: docker_app
+      POSTGRES_PASSWORD: docker_app
+    volumes:
+      - db_stage:/var/lib/postgresql/data
+    networks:
+      - general_net
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready", "-U", "docker_app" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    deploy:
+      replicas: 1
+
   init-kafka:
     image: confluentinc/cp-kafka:latest
     depends_on:
       - kafka
     networks:
       - kafka_network
-      - general_random_net
+      - general_net
     entrypoint: [ '/bin/sh', '-c' ]
     command: |
       "
@@ -57,8 +77,10 @@ services:
       "
 
 networks:
-  general_random_net:
-    name: general_random_net
+  general_net:
+    name: general_net
   kafka_network:
     name: kafka_network
 
+volumes:
+  db_stage: {}

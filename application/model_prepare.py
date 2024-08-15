@@ -8,10 +8,11 @@ from pyspark.ml.feature import StringIndexer
 from pyspark.ml.regression import RandomForestRegressor
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 from pyspark.sql import DataFrame
-from datetime import datetime
+from datetime import datetime, timedelta
 from pyspark.sql import SparkSession
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.feature import VectorAssembler
+from pyspark.sql.functions import col
 
 
 def vector_assembler(features_columns: list) -> VectorAssembler:
@@ -107,17 +108,17 @@ if __name__ == "__main__":
     spark = SparkSession.builder.getOrCreate()
 
     # эмуляция данных
-    from application.producer_emulator import *
-    streets_names = get_streets_names()
-    cities_names = get_cities_names(spark_session=spark)
-    df = (create_data(spark, cities=cities_names, streets=streets_names)
-          .withColumn("key", monotonically_increasing_id())
-          )
-
-    # Получение данных из Hive
-    # df = (spark.table('FLATS_HIVE_TABLE').filter(col('created_at') > running_date - timedelta(weeks=4))
+    # from application.producer_emulator import *
+    # streets_names = get_streets_names()
+    # cities_names = get_cities_names(spark_session=spark)
+    # df = (create_data(spark, cities=cities_names, streets=streets_names)
+    #       .withColumn("key", monotonically_increasing_id())
     #       )
 
+    # Получение данных из Hive
+    df = (spark.table('FLATS_HIVE_TABLE').filter(col('created_at') > running_date - timedelta(weeks=4))
+          )
+    df.show()
     df = df.drop('key', 'created_at').filter(col('city').isNotNull() & col('street').isNotNull())
     prepared_model = train_model(dataframe=df)
     prepared_model.write().overwrite().save("./models")

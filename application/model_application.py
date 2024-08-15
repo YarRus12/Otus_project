@@ -29,7 +29,6 @@ def execute_model(model_path, dataframe):
     return result.select("key", "prediction")
 
 
-
 if __name__ == "__main__":
     spark = SparkSession.builder.appName("My App").getOrCreate()
     # Укажите путь к директории, где вы сохранили модель
