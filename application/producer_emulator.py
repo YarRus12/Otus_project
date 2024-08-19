@@ -1,7 +1,9 @@
 import os
+import time
+from datetime import datetime
 from typing import Generator
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import monotonically_increasing_id, to_json, struct, col
+from pyspark.sql.functions import monotonically_increasing_id, to_json, struct, col, current_date
 from pyspark.sql.types import StructType, StringType, StructField, IntegerType
 import random
 import requests
@@ -58,11 +60,11 @@ def create_data(spark_session: SparkSession, cities: list, streets: list, record
         StructField("street", StringType(), True),
         StructField("floor", IntegerType(), True),
         StructField("rooms", IntegerType(), True),
-        StructField("price", IntegerType(), True)
+        StructField("price", IntegerType(), True),
     ])
-    data = generate_random_data(record_num=record_num, cities=cities, streets=streets)
+    data = (generate_random_data(record_num=record_num, cities=cities, streets=streets))
     dataframe = spark_session.createDataFrame(data, schema)
-    return dataframe.withColumn("id", monotonically_increasing_id())
+    return (dataframe.withColumn("id", monotonically_increasing_id()))
 
 
 def producer_to_kafka(data: DataFrame, topic: str):
@@ -78,6 +80,8 @@ def producer_to_kafka(data: DataFrame, topic: str):
      .save()
      )
 
+    print(f'Data send to {kafka_options["topic"]} successfully at {datetime.now()}')
+
 
 if __name__ == "__main__":
     spark = SparkSession.builder \
@@ -88,8 +92,10 @@ if __name__ == "__main__":
     spark.sparkContext.setLogLevel('WARN')
     streets_names = get_streets_names()
     cities_names = get_cities_names(spark_session=spark)
-    record_num = 500
+    record_num = random.randint(100, 1000)
     topic = "new_data"
-    generated_df = (create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
-                    )
-    producer_to_kafka(data=generated_df, topic=topic)
+    for x in range(50):
+        generated_df = (create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
+                        )
+        producer_to_kafka(data=generated_df, topic=topic)
+        time.sleep(30)

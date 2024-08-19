@@ -15,6 +15,30 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.functions import col
 
 
+
+spark_jars_packages = ",".join(
+    [
+        "org.postgresql:postgresql:42.2.24"
+    ]
+)
+
+def get_data_psql(spark_session: SparkSession) -> DataFrame:
+    host = 'localhost'
+    port = 5435
+    database = 'docker_app_db'
+    pg_df = (spark_session.read
+             .format("jdbc")
+             .option("dbtable", "STAGE.FLATS_TABLE")
+             .option("url", f"jdbc:postgresql://{host}:{port}/{database}")
+             .option("user", "docker_app")
+             .option("password", "docker_app")
+             .option("driver", "org.postgresql.Driver")
+             .load()
+             )
+    if pg_df.take(1):
+        return pg_df
+
+
 def vector_assembler(features_columns: list) -> VectorAssembler:
     """
     Функция создает векторизатор признаков для построения модели
@@ -105,21 +129,18 @@ def train_model(dataframe: DataFrame):
 
 if __name__ == "__main__":
     running_date = datetime.now().date()
-    spark = SparkSession.builder.getOrCreate()
-
-    # эмуляция данных
-    # from application.producer_emulator import *
-    # streets_names = get_streets_names()
-    # cities_names = get_cities_names(spark_session=spark)
-    # df = (create_data(spark, cities=cities_names, streets=streets_names)
-    #       .withColumn("key", monotonically_increasing_id())
-    #       )
+    spark = (SparkSession.builder
+             .config("spark.sql.session.timeZone", "UTC")
+             .config("spark.jars.packages", spark_jars_packages)
+             .getOrCreate()
+             )
 
     # Получение данных из Hive
-    df = (spark.table('FLATS_HIVE_TABLE').filter(col('created_at') > running_date - timedelta(weeks=4))
+    df = get_data_psql(spark_session=spark)
+    df = (df.filter(col('created_at') >= running_date-timedelta(weeks=4))
+          .filter(col('city').isNotNull() & col('street').isNotNull())
+          .drop('key', 'created_at')
           )
-    df.show()
-    df = df.drop('key', 'created_at').filter(col('city').isNotNull() & col('street').isNotNull())
     prepared_model = train_model(dataframe=df)
     prepared_model.write().overwrite().save("./models")
 

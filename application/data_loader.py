@@ -1,7 +1,7 @@
 import os
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import current_date, from_json, col, struct
-from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType, DateType
 
 spark_jars_packages = ",".join(
     [
@@ -12,25 +12,29 @@ spark_jars_packages = ",".join(
 
 
 def write_to_psql(df: DataFrame, epoch_id) -> None:
-    result = df.withColumn('created_at', current_date())
-    (result.write
+    host = 'localhost'
+    port = 5435
+    database = 'docker_app_db'
+    df.show(truncate=False)
+    (df
+     .select("city", "street", "floor", "rooms", "price", current_date().alias("created_at"))
+     .write
      .format("jdbc")
      .mode("append")
-     .partitionBy('created_at')
-     .option("url", "jdbc:postgresql://localhost:5432/postgres")
-     .option("dbtable", "docker_app_db")
+     .option("dbtable", "STAGE.FLATS_TABLE")
+     .option("url", f"jdbc:postgresql://{host}:{port}/{database}")
      .option("user", "docker_app")
      .option("password", "docker_app")
      .option("driver", "org.postgresql.Driver")
-     .save()
-     )
+     .save())
+
+    print('Data loaded successfully')
 
 
 def process_batch(df: DataFrame, epoch_id) -> None:
     # Выводим данные на экран
-    df.show(truncate=False)
-    # Записываем данные в Hive
-    write_to_psql(df, epoch_id)
+    if df.count() > 0:
+        write_to_psql(df, epoch_id)
 
 
 def kafka_consumer(spark, topic="new_data"):
