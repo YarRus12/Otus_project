@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS STAGE.FLATS_TABLE
     created_at date
     );
 
+CREATE TABLE IF NOT EXISTS STAGE.ANSWERS_TABLE
+    (id varchar(100),
+    prediction bigint,
+    created_at date
+    );
+
 
 DO
 $$

@@ -1,17 +1,13 @@
 import time
-from datetime import datetime
 from typing import Generator
 import schedule
-from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import monotonically_increasing_id, to_json, struct, col
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import monotonically_increasing_id
 from pyspark.sql.types import StructType, StringType, StructField, IntegerType
 import random
 import requests
 from flask import Flask, jsonify
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-spark_jars_packages = ",".join(["org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0", ])
+from application.utils import producer_to_kafka, create_logger, create_spark_session
 
 
 def get_streets_names() -> list:
@@ -64,7 +60,7 @@ def get_cities_names(spark_session: SparkSession) -> list:
 
 def generate_random_data(record_num, cities: list, streets: list) -> Generator:
     """
-        Создаем случайные данные о квартирах
+    Создаем случайные данные о квартирах
     """
     for i in range(record_num):
         yield {
@@ -77,6 +73,15 @@ def generate_random_data(record_num, cities: list, streets: list) -> Generator:
 
 
 def create_data(spark_session: SparkSession, cities: list, streets: list, record_num: int):
+    """
+    Создаем DataFrame с данными
+
+    :param spark_session: спарк-сессия
+    :param cities: список городов
+    :param streets: список улиц
+    :param record_num: число записей на генерацию
+    :return:
+    """
     schema = StructType([
         StructField("id", IntegerType(), True),
         StructField("city", StringType(), True),
@@ -90,45 +95,20 @@ def create_data(spark_session: SparkSession, cities: list, streets: list, record
     return dataframe.withColumn("id", monotonically_increasing_id())
 
 
-def producer_to_kafka(data: DataFrame, topic: str, host: str, port: int) -> str:
-    kafka_options = {
-        "kafka.bootstrap.servers": f"{host}:{port}",
-        "topic": topic
-    }
-    data = data.cache()
-    num_rows = data.count()
-    (data
-     .select(to_json(struct(*[col(c) for c in data.columns])).alias("value"))
-     .write
-     .format("kafka")
-     .options(**kafka_options)
-     .save()
-     )
-    data.unpersist()
-    return f'{num_rows} rows were send to {kafka_options["topic"]} successfully at {datetime.now()}'
-
-
 app = Flask(__name__)
 
 
 @app.route('/generate_and_produce_new_data', methods=['GET'])
 def generate_and_produce_new_data():
-    spark = (SparkSession.builder
-             .appName("Producer Emulator")
-             .config("spark.sql.session.timeZone", "UTC")
-             .config("spark.jars.packages", spark_jars_packages)
-             .getOrCreate())
-    spark.sparkContext.setLogLevel('WARN')
+    spark = create_spark_session(app_name="Producer Emulator")
     streets_names = get_streets_names()
     if streets_names is None:
         logger.error("Mockaroo API error")
         streets_names = get_streets_names_archives(spark_session=spark)
     cities_names = get_cities_names(spark_session=spark)
     record_num = random.randint(20, 100)
-    topic = "new_data"
-
     generated_df = create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
-    message = producer_to_kafka(data=generated_df, topic=topic, host="localhost", port=9092)
+    message = producer_to_kafka(data=generated_df, topic="new_data", host="localhost", port=9092, logger=logger)
     logger.info(message)
     return {'message': message}
 
@@ -140,8 +120,6 @@ schedule.every(120).seconds.do(generate_and_produce_new_data)
 def generate_and_produce_requests():
     spark = (SparkSession.builder
              .appName("Requests Emulator")
-             .config("spark.sql.session.timeZone", "UTC")
-             .config("spark.jars.packages", spark_jars_packages)
              .getOrCreate())
     spark.sparkContext.setLogLevel('WARN')
     streets_names = get_streets_names()
@@ -150,12 +128,10 @@ def generate_and_produce_requests():
         streets_names = get_streets_names_archives(spark_session=spark)
     cities_names = get_cities_names(spark_session=spark)
     record_num = random.randint(2, 5)
-    topic = "requests"
-
     generated_df = (create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
                     .select("id", "city", "street", "floor", "rooms")
                     )
-    message = producer_to_kafka(data=generated_df, topic=topic, host="localhost", port=9092)
+    message = producer_to_kafka(data=generated_df, topic="requests", host="localhost", port=9092, logger=logger)
     logger.info(message)
     return {'message': message}
 
@@ -166,8 +142,7 @@ def status():
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger = create_logger()
 
     while True:
         schedule.run_pending()

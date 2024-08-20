@@ -2,7 +2,6 @@
 Модуль обучает модель на данных, сохраненных за последний месяц
 """
 
-import logging
 from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import StringIndexer
@@ -14,27 +13,7 @@ from pyspark.sql import SparkSession
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.functions import col
-logging.basicConfig(level=logging.DEBUG)
-
-spark_jars_packages = ",".join(["org.postgresql:postgresql:42.2.24"])
-
-
-def get_data_psql(spark_session: SparkSession) -> DataFrame:
-    host = 'localhost'
-    port = 5435
-    database = 'docker_app_db'
-    table_name = "STAGE.FLATS_TABLE"
-    pg_df = (spark_session.read
-             .format("jdbc")
-             .option("dbtable", table_name)
-             .option("url", f"jdbc:postgresql://{host}:{port}/{database}")
-             .option("user", "docker_app")
-             .option("password", "docker_app")
-             .option("driver", "org.postgresql.Driver")
-             .load()
-             )
-    if pg_df.take(1):
-        return pg_df
+from application.utils import create_logger, get_data_psql, create_spark_session
 
 
 def vector_assembler(features_columns: list) -> VectorAssembler:
@@ -125,23 +104,16 @@ def train_model(dataframe: DataFrame):
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-
+    logger = create_logger()
     running_date = datetime.now().date()
-    spark = (SparkSession.builder
-             .config("spark.sql.session.timeZone", "UTC")
-             .config("spark.jars.packages", spark_jars_packages)
-             .getOrCreate()
-             )
+    spark = create_spark_session(app_name="ModelPrepare")
 
-    # Получение данных из PostgreSQL
     df = get_data_psql(spark_session=spark)
     df = (df.filter(col('created_at') >= running_date-timedelta(weeks=4))
           .filter(col('city').isNotNull() & col('street').isNotNull())
           .drop('key', 'created_at')
           )
     prepared_model = train_model(dataframe=df)
-    prepared_model.write().overwrite().save("./models")
-
+    path = "./models"
+    prepared_model.write().overwrite().save(path)
     spark.stop()
