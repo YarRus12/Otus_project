@@ -6,3 +6,7 @@ py4j==0.10.9.7
 pyspark==3.5.1
 requests==2.32.3
 urllib3==2.2.2
+
+psycopg2~=2.9.9
+schedule~=1.2.2
+flask~=3.0.3

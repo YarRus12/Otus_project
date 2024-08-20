@@ -1,7 +1,8 @@
 """
-Модуль обучает модель на сохраненных за последний месяц данных
+Модуль обучает модель на данных, сохраненных за последний месяц
 """
 
+import logging
 from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import StringIndexer
@@ -13,22 +14,19 @@ from pyspark.sql import SparkSession
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.functions import col
+logging.basicConfig(level=logging.DEBUG)
 
+spark_jars_packages = ",".join(["org.postgresql:postgresql:42.2.24"])
 
-
-spark_jars_packages = ",".join(
-    [
-        "org.postgresql:postgresql:42.2.24"
-    ]
-)
 
 def get_data_psql(spark_session: SparkSession) -> DataFrame:
     host = 'localhost'
     port = 5435
     database = 'docker_app_db'
+    table_name = "STAGE.FLATS_TABLE"
     pg_df = (spark_session.read
              .format("jdbc")
-             .option("dbtable", "STAGE.FLATS_TABLE")
+             .option("dbtable", table_name)
              .option("url", f"jdbc:postgresql://{host}:{port}/{database}")
              .option("user", "docker_app")
              .option("password", "docker_app")
@@ -44,7 +42,7 @@ def vector_assembler(features_columns: list) -> VectorAssembler:
     Функция создает векторизатор признаков для построения модели
     """
     chosen_columns = [x for x in features_columns if x not in ('price', 'city', 'street', 'key', 'created_at')]
-    print(chosen_columns)
+    logger.info(chosen_columns)
     features = VectorAssembler(inputCols=chosen_columns, outputCol="features")
     return features
 
@@ -84,8 +82,8 @@ def build_tvs(lr) -> TrainValidationSplit:
 
 
 def data_preparation(in_dataframe: DataFrame) -> DataFrame:
-    city_index = StringIndexer(inputCol='city', outputCol="city_index")
-    street_index = StringIndexer(inputCol='street', outputCol="street_index")
+    city_index = StringIndexer(inputCol='city', outputCol="city_index", handleInvalid="keep")
+    street_index = StringIndexer(inputCol='street', outputCol="street_index", handleInvalid="keep")
     indexed_dataframe = city_index.fit(in_dataframe).transform(in_dataframe)
     indexed_dataframe = street_index.fit(indexed_dataframe).transform(indexed_dataframe)
     assembler = vector_assembler(
@@ -104,7 +102,6 @@ def train_model(dataframe: DataFrame):
 
     lr = LinearRegression(featuresCol='features', labelCol='price')
     tvs = build_tvs(lr)
-
     models = tvs.fit(train_df)
     best = models.bestModel
     pipeline = Pipeline(stages=[best])
@@ -122,12 +119,15 @@ def train_model(dataframe: DataFrame):
     # Оценка R²
     evaluator_r2 = RegressionEvaluator(predictionCol='prediction', labelCol='price', metricName='r2')
     r2 = evaluator_r2.evaluate(predictions)
-    print(f"RMSE: {rmse}, MAE: {mae}, R²: {r2}")
+    logger.info(f"RMSE: {rmse}, MAE: {mae}, R²: {r2}")
 
     return p_model
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
     running_date = datetime.now().date()
     spark = (SparkSession.builder
              .config("spark.sql.session.timeZone", "UTC")
@@ -135,7 +135,7 @@ if __name__ == "__main__":
              .getOrCreate()
              )
 
-    # Получение данных из Hive
+    # Получение данных из PostgreSQL
     df = get_data_psql(spark_session=spark)
     df = (df.filter(col('created_at') >= running_date-timedelta(weeks=4))
           .filter(col('city').isNotNull() & col('street').isNotNull())
