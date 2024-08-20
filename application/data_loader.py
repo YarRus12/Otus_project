@@ -1,12 +1,11 @@
-import os
 import time
-
+from datetime import datetime
 import schedule
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import current_date, from_json, col, struct
-from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType, DateType
+from pyspark.sql.functions import current_date, from_json, col
+from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 import logging
-from flask import Flask, jsonify
+from flask import Flask
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -78,7 +77,7 @@ def kafka_consumer(spark_session: SparkSession, host: str, port: int, topic: str
 
     df = (spark_session.readStream
           .format("kafka")
-          .option("subscribe", "new_data")
+          .option("subscribe", topic)
           .options(**kafka_options)
           .load()
           )

@@ -95,7 +95,7 @@ def producer_to_kafka(data: DataFrame, topic: str, host: str, port: int) -> str:
         "kafka.bootstrap.servers": f"{host}:{port}",
         "topic": topic
     }
-    data = data.select("id", "city", "street", "floor", "rooms", "price").cache()
+    data = data.cache()
     num_rows = data.count()
     (data
      .select(to_json(struct(*[col(c) for c in data.columns])).alias("value"))
@@ -111,8 +111,8 @@ def producer_to_kafka(data: DataFrame, topic: str, host: str, port: int) -> str:
 app = Flask(__name__)
 
 
-@app.route('/generate_and_produce', methods=['GET'])
-def generate_and_produce():
+@app.route('/generate_and_produce_new_data', methods=['GET'])
+def generate_and_produce_new_data():
     spark = (SparkSession.builder
              .appName("Producer Emulator")
              .config("spark.sql.session.timeZone", "UTC")
@@ -133,7 +133,31 @@ def generate_and_produce():
     return {'message': message}
 
 
-schedule.every(120).seconds.do(generate_and_produce)
+schedule.every(120).seconds.do(generate_and_produce_new_data)
+
+
+@app.route('/generate_and_produce_requests', methods=['GET'])
+def generate_and_produce_requests():
+    spark = (SparkSession.builder
+             .appName("Requests Emulator")
+             .config("spark.sql.session.timeZone", "UTC")
+             .config("spark.jars.packages", spark_jars_packages)
+             .getOrCreate())
+    spark.sparkContext.setLogLevel('WARN')
+    streets_names = get_streets_names()
+    if streets_names is None:
+        logger.error("Mockaroo API error")
+        streets_names = get_streets_names_archives(spark_session=spark)
+    cities_names = get_cities_names(spark_session=spark)
+    record_num = random.randint(2, 5)
+    topic = "requests"
+
+    generated_df = (create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
+                    .select("id", "city", "street", "floor", "rooms")
+                    )
+    message = producer_to_kafka(data=generated_df, topic=topic, host="localhost", port=9092)
+    logger.info(message)
+    return {'message': message}
 
 
 @app.route('/status', methods=['GET'])
@@ -148,4 +172,5 @@ if __name__ == "__main__":
     while True:
         schedule.run_pending()
         time.sleep(10)
-        result = generate_and_produce()
+        result_new_data = generate_and_produce_new_data()
+        result_requests = generate_and_produce_requests()
