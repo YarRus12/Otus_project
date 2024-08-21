@@ -4,7 +4,7 @@ from pyspark.ml import PipelineModel
 from pyspark.ml.feature import StringIndexer, VectorAssembler
 from pyspark.sql import DataFrame
 from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
-from application.utils import producer_to_kafka, create_logger, create_spark_session, kafka_consumer, write_to_psql
+from utils import producer_to_kafka, create_logger, create_spark_session, kafka_consumer, write_to_psql
 from flask import Flask
 
 
@@ -12,7 +12,7 @@ def execute_model(path, dataframe):
     loaded_model = PipelineModel.load(path)
 
     # Подтверждение успешной загрузки
-    logger.info("Model loaded successfully.")
+    logger.info("Model loaded successfully")
     # Apply the same transformations as during training
     city_indexer = StringIndexer(inputCol='city', outputCol='city_index')
     city_indexer.setHandleInvalid("skip")
@@ -44,13 +44,13 @@ def process_batch(dataframe: DataFrame, epoch_id) -> None:
     :param epoch_id:
     :return: None
     """
-    result = execute_model(path="./models", dataframe=dataframe).cache()
+    result = execute_model(path="models", dataframe=dataframe).cache()
     message = producer_to_kafka(data=result, topic="answers", host="localhost", port=9092, logger=logger)
-    logger.debug(message)
+    logger.info(message)
 
     columns = ["id", "prediction"]
     message = write_to_psql(df=result, table_name='STAGE.ANSWERS_TABLE', columns=columns)
-    logger.debug(message)
+    logger.info(message)
     result.unpersist()
 
 

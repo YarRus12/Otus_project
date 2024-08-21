@@ -7,7 +7,7 @@ from pyspark.sql.types import StructType, StringType, StructField, IntegerType
 import random
 import requests
 from flask import Flask, jsonify
-from application.utils import producer_to_kafka, create_logger, create_spark_session
+from utils import producer_to_kafka, create_logger, create_spark_session
 
 
 def get_streets_names() -> list:
@@ -109,7 +109,6 @@ def generate_and_produce_new_data():
     record_num = random.randint(20, 100)
     generated_df = create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
     message = producer_to_kafka(data=generated_df, topic="new_data", host="localhost", port=9092, logger=logger)
-    logger.info(message)
     return {'message': message}
 
 
@@ -132,7 +131,6 @@ def generate_and_produce_requests():
                     .select("id", "city", "street", "floor", "rooms")
                     )
     message = producer_to_kafka(data=generated_df, topic="requests", host="localhost", port=9092, logger=logger)
-    logger.info(message)
     return {'message': message}
 
 
@@ -145,7 +143,7 @@ if __name__ == "__main__":
     logger = create_logger()
 
     while True:
-        schedule.run_pending()
-        time.sleep(10)
         result_new_data = generate_and_produce_new_data()
+        logger.info(result_new_data)
         result_requests = generate_and_produce_requests()
+        logger.info(result_requests)

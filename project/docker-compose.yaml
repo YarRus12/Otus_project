@@ -37,9 +37,10 @@ services:
       KAFKA_SEGMENT_MS: 25920000
       KAFKA_SEGMENT_BYTES: 107374182
 
-  database_stage:
+  database:
     build:
       dockerfile: Dockerfile #нужен конкретный образ, с командами инициализации базы данных
+    container_name: database
     environment:
       POSTGRES_DB: docker_app_db
       POSTGRES_USER: docker_app
@@ -59,7 +60,8 @@ services:
     deploy:
       replicas: 1
 
-  init-kafka:
+
+  db_init-kafka:
     image: confluentinc/cp-kafka:latest
     depends_on:
       - kafka
@@ -81,6 +83,24 @@ services:
       echo -e 'Successfully created the following topics:'
       kafka-topics --bootstrap-server kafka:29092 --list
       "
+
+  application:
+    build:
+      dockerfile: application/Dockerfile
+    container_name: application_project
+    volumes:
+      - ./application:/app
+    depends_on:
+      - database
+      - kafka
+    networks:
+      - general_net
+    environment:
+      HOST: database
+      PORT: 5435
+      DB: docker_app_db
+      DB_USERNAME: docker_app
+      POSTGRES_PASSWORD: docker_app
 
 networks:
   general_net:

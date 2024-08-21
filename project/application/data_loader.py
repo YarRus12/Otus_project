@@ -4,7 +4,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 from flask import Flask
 
-from application.utils import write_to_psql, create_logger, create_spark_session, kafka_consumer
+from utils import write_to_psql, create_logger, create_spark_session, kafka_consumer
 
 
 def process_batch(df: DataFrame, epoch_id) -> None:

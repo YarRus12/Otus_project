@@ -27,6 +27,7 @@ def producer_to_kafka(data: DataFrame, topic: str, host: str, port: int, logger:
     :param topic: название топика
     :param host: хост Kafka
     :param port: порт Kafka
+    :param logger: логгер
     :return: сообщение
     """
     kafka_options = {
@@ -102,9 +103,9 @@ def kafka_consumer(spark_session,
           )
 
     processed_df = df.select(
-            col("key"),
-            from_json(col("value").cast("string"), schema).alias("data")
-        ).select("key", "data.*").select(*columns)
+        col("key"),
+        from_json(col("value").cast("string"), schema).alias("data")
+    ).select("key", "data.*").select(*columns)
 
     query = processed_df.writeStream \
         .outputMode("append") \
@@ -143,7 +144,7 @@ def spark_configs() -> SparkConf:
     default_configs = [("spark.sql.shuffle.partitions", '500'),
                        ("spark.sql.session.timeZone", "UTC"),
                        ("spark.jars.packages", spark_jars_packages),
-    ]
+                       ]
     return SparkConf().setAll(default_configs)
 
 
@@ -156,4 +157,3 @@ def create_spark_session(app_name: str) -> SparkSession:
              )
     spark.sparkContext.setLogLevel('WARN')
     return spark
-

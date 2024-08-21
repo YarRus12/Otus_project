@@ -9,11 +9,10 @@ from pyspark.ml.regression import RandomForestRegressor
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 from pyspark.sql import DataFrame
 from datetime import datetime, timedelta
-from pyspark.sql import SparkSession
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.functions import col
-from application.utils import create_logger, get_data_psql, create_spark_session
+from utils import create_logger, get_data_psql, create_spark_session
 
 
 def vector_assembler(features_columns: list) -> VectorAssembler:
@@ -114,6 +113,6 @@ if __name__ == "__main__":
           .drop('key', 'created_at')
           )
     prepared_model = train_model(dataframe=df)
-    path = "./models"
+    path = "models"
     prepared_model.write().overwrite().save(path)
     spark.stop()
