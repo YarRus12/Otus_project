@@ -1,4 +1,4 @@
-version: '3'
+version: '3.8'
 
 services:
   zookeeper:
@@ -39,7 +39,8 @@ services:
 
   database:
     build:
-      dockerfile: Dockerfile #нужен конкретный образ, с командами инициализации базы данных
+      context: .  # Указываем контекст сборки
+      dockerfile: Dockerfile  # Указываем конкретный Dockerfile
     container_name: database
     environment:
       POSTGRES_DB: docker_app_db
@@ -60,7 +61,6 @@ services:
     deploy:
       replicas: 1
 
-
   db_init-kafka:
     image: confluentinc/cp-kafka:latest
     depends_on:
@@ -79,28 +79,102 @@ services:
       kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic requests --replication-factor 1 --partitions 1
       kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic answers --replication-factor 1 --partitions 1
       
-      
       echo -e 'Successfully created the following topics:'
       kafka-topics --bootstrap-server kafka:29092 --list
       "
 
-  application:
+  producer_emulator:
     build:
-      dockerfile: application/Dockerfile
-    container_name: application_project
-    volumes:
-      - ./application:/app
+      context: ./
+      dockerfile: ./producer_emulator/Dockerfile
+    container_name: producer_emulator
     depends_on:
       - database
       - kafka
     networks:
       - general_net
+      - kafka_network
+    ports:
+      - "8081:8081"
     environment:
+      FLASK_APP: producer_emulator.py
+      FLASK_RUN_PORT: 8081
+      FLASK_RUN_HOST: 0.0.0.0
+      FLASK_ENV: development
+      FLASK_APP_DIR: /app
       HOST: database
       PORT: 5435
       DB: docker_app_db
       DB_USERNAME: docker_app
       POSTGRES_PASSWORD: docker_app
+    healthcheck:
+      test: [ "CMD", "curl", "localhost:8081/status" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    command: ["sh", "-c", "ls -l /app && ls -l /app/utils.py && flask run --host=0.0.0.0"]
+
+#  data_loader:
+#    build:
+#      context: ./
+#      dockerfile: ./data_loader/Dockerfile
+#    container_name: data_loader
+#    depends_on:
+#      - database
+#      - kafka
+#    networks:
+#      - general_net
+#      - kafka_network
+#    ports:
+#      - "8082:8082"
+#    environment:
+#      FLASK_APP: data_loader.py
+#      FLASK_RUN_PORT: 8082
+#      FLASK_RUN_HOST: 0.0.0.0
+#      FLASK_ENV: development
+#      FLASK_APP_DIR: /app
+#      HOST: database
+#      PORT: 5435
+#      DB: docker_app_db
+#      DB_USERNAME: docker_app
+#      POSTGRES_PASSWORD: docker_app
+#    healthcheck:
+#      test: [ "CMD", "curl", "localhost:8082/status" ]
+#      interval: 5s
+#      timeout: 5s
+#      retries: 3
+#    command: [ "sh", "-c", "ls -l /app && ls -l /app/utils.py && flask run --host=0.0.0.0" ]
+#
+#  model_application:
+#    build:
+#      context: ./
+#      dockerfile: ./model_application/Dockerfile
+#    container_name: model_application
+#    depends_on:
+#      - database
+#      - kafka
+#    networks:
+#      - general_net
+#      - kafka_network
+#    ports:
+#      - "8083:8083"
+#    environment:
+#      FLASK_APP: model_application.py
+#      FLASK_RUN_PORT: 8083
+#      FLASK_RUN_HOST: 0.0.0.0
+#      FLASK_ENV: development
+#      FLASK_APP_DIR: /app
+#      HOST: database
+#      PORT: 5435
+#      DB: docker_app_db
+#      DB_USERNAME: docker_app
+#      POSTGRES_PASSWORD: docker_app
+#    healthcheck:
+#      test: [ "CMD", "curl", "localhost:8083/status" ]
+#      interval: 5s
+#      timeout: 5s
+#      retries: 3
+#    command: [ "sh", "-c", "ls -l /app && ls -l /app/utils.py && flask run --host=0.0.0.0" ]
 
 networks:
   general_net:

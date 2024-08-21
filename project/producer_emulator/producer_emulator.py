@@ -1,13 +1,14 @@
-import time
+from functools import partial  
 from typing import Generator
 import schedule
+from apscheduler.schedulers.background import BackgroundScheduler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import monotonically_increasing_id
 from pyspark.sql.types import StructType, StringType, StructField, IntegerType
 import random
 import requests
 from flask import Flask, jsonify
-from utils import producer_to_kafka, create_logger, create_spark_session
+from project.utils import producer_to_kafka, create_logger, create_spark_session
 
 
 def get_streets_names() -> list:
@@ -19,7 +20,7 @@ def get_streets_names() -> list:
     url = "https://my.api.mockaroo.com/otus_api.json"
     headers = {
         "X-API-Key": "045554c0",  # это следовало бы поместить в переменную окружения
-        "Content-Type": "application/json",
+        "Content-Type": "applications/json",
     }
     response = requests.get(url, headers=headers)
 
@@ -99,39 +100,38 @@ app = Flask(__name__)
 
 
 @app.route('/generate_and_produce_new_data', methods=['GET'])
-def generate_and_produce_new_data():
-    spark = create_spark_session(app_name="Producer Emulator")
+def generate_and_produce_new_data(spark_session: SparkSession):
+    logger.info("Запуск генерации новых данных")
     streets_names = get_streets_names()
     if streets_names is None:
         logger.error("Mockaroo API error")
-        streets_names = get_streets_names_archives(spark_session=spark)
-    cities_names = get_cities_names(spark_session=spark)
+        streets_names = get_streets_names_archives(spark_session=spark_session)
+    cities_names = get_cities_names(spark_session=spark_session)
     record_num = random.randint(20, 100)
-    generated_df = create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
+    generated_df = create_data(spark_session=spark_session, cities=cities_names,
+                               streets=streets_names, record_num=record_num)
     message = producer_to_kafka(data=generated_df, topic="new_data", host="localhost", port=9092, logger=logger)
-    return {'message': message}
+    logger.info(message)
 
 
 schedule.every(120).seconds.do(generate_and_produce_new_data)
 
 
 @app.route('/generate_and_produce_requests', methods=['GET'])
-def generate_and_produce_requests():
-    spark = (SparkSession.builder
-             .appName("Requests Emulator")
-             .getOrCreate())
-    spark.sparkContext.setLogLevel('WARN')
+def generate_and_produce_requests(spark_session: SparkSession):
+    logger.info("Запуск генерации запросов")
     streets_names = get_streets_names()
     if streets_names is None:
         logger.error("Mockaroo API error")
-        streets_names = get_streets_names_archives(spark_session=spark)
-    cities_names = get_cities_names(spark_session=spark)
+        streets_names = get_streets_names_archives(spark_session=spark_session)
+    cities_names = get_cities_names(spark_session=spark_session)
     record_num = random.randint(2, 5)
-    generated_df = (create_data(spark, cities=cities_names, streets=streets_names, record_num=record_num)
+    generated_df = (create_data(spark_session=spark_session, cities=cities_names,
+                                streets=streets_names, record_num=record_num)
                     .select("id", "city", "street", "floor", "rooms")
                     )
     message = producer_to_kafka(data=generated_df, topic="requests", host="localhost", port=9092, logger=logger)
-    return {'message': message}
+    logger.info(message)
 
 
 @app.route('/status', methods=['GET'])
@@ -141,9 +141,13 @@ def status():
 
 if __name__ == "__main__":
     logger = create_logger()
-
-    while True:
-        result_new_data = generate_and_produce_new_data()
-        logger.info(result_new_data)
-        result_requests = generate_and_produce_requests()
-        logger.info(result_requests)
+    logger.info("Start producer emulator")
+    spark = create_spark_session(app_name="Producer Emulator")
+    scheduler = BackgroundScheduler()
+    generate_and_produce_new_data_partial = partial(generate_and_produce_new_data, spark_session=spark)
+    scheduler.add_job(func=generate_and_produce_new_data_partial, trigger="interval", seconds=100)
+    generate_and_produce_requests_partial = partial(generate_and_produce_requests, spark_session=spark)
+    scheduler.add_job(func=generate_and_produce_requests_partial, trigger="interval", seconds=30)
+    scheduler.start()
+    logger.info(f"Scheduled jobs: {scheduler.get_jobs()}")
+    app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8081)

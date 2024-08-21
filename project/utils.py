@@ -13,9 +13,22 @@ def create_logger() -> logging.Logger:
 
     :return: логгер
     """
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)  # Установите максимальный уровень логирования на DEBUG
+
+    # Создайте обработчик для консоли и установите уровень на debug
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+
+    # Создайте форматтер
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    # Добавьте форматтер к ch
+    ch.setFormatter(formatter)
+
+    # Добавьте ch к логгеру
+    logger.addHandler(ch)
+
     return logger
 
 
@@ -36,6 +49,8 @@ def producer_to_kafka(data: DataFrame, topic: str, host: str, port: int, logger:
     }
     data = data.cache()
     num_rows = data.count()
+    if num_rows == 0:
+        return f'df is empty'
     try:
         (data
          .select(to_json(struct(*[col(c) for c in data.columns])).alias("value"))
@@ -79,7 +94,7 @@ def write_to_psql(df: DataFrame, table_name: str, columns: list) -> str:
      .option("driver", "org.postgresql.Driver")
      .save())
 
-    message = f'{num_rows} rows written send to {table_name} successfully at {datetime.now()}'
+    message = f'{num_rows} rows written to {table_name} successfully at {datetime.now()}'
     return message
 
 

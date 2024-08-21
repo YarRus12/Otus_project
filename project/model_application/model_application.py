@@ -1,15 +1,21 @@
 import threading
 import time
+from functools import partial
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from pyspark.ml import PipelineModel
 from pyspark.ml.feature import StringIndexer, VectorAssembler
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
-from utils import producer_to_kafka, create_logger, create_spark_session, kafka_consumer, write_to_psql
-from flask import Flask
+from project.utils import producer_to_kafka, create_logger, create_spark_session, kafka_consumer, write_to_psql
+from flask import Flask, jsonify
 
 
-def execute_model(path, dataframe):
-    loaded_model = PipelineModel.load(path)
+def load_model(path) -> PipelineModel:
+    return PipelineModel.load(path)
+
+
+def execute_model(loaded_model:PipelineModel, dataframe: DataFrame) -> DataFrame:
 
     # Подтверждение успешной загрузки
     logger.info("Model loaded successfully")
@@ -36,15 +42,16 @@ def execute_model(path, dataframe):
     return result.select("id", "prediction")
 
 
-def process_batch(dataframe: DataFrame, epoch_id) -> None:
+def process_batch(dataframe: DataFrame, epoch_id, loaded_model: PipelineModel) -> None:
     """
     Обработка данных в пакете
 
     :param dataframe: данные в пакете
+    :param loaded_model: модель
     :param epoch_id:
     :return: None
     """
-    result = execute_model(path="models", dataframe=dataframe).cache()
+    result = execute_model(dataframe=dataframe, loaded_model=loaded_model).cache()
     message = producer_to_kafka(data=result, topic="answers", host="localhost", port=9092, logger=logger)
     logger.info(message)
 
@@ -57,7 +64,7 @@ def process_batch(dataframe: DataFrame, epoch_id) -> None:
 app = Flask(__name__)
 
 
-def start_kafka_consumer():
+def start_kafka_consumer(spark_session: SparkSession, loaded_model: PipelineModel):
     schema = StructType([
         StructField("id", LongType(), True),
         StructField("city", StringType(), True),
@@ -65,25 +72,25 @@ def start_kafka_consumer():
         StructField("floor", IntegerType(), True),
         StructField("rooms", IntegerType(), True)
     ])
-    kafka_consumer(spark_session=spark, host="localhost", port=9092, topic="requests",
-                   schema=schema, process_batch=process_batch, columns=["id", "city", "street", "floor", "rooms"])
+    kafka_consumer(spark_session=spark_session, host="localhost", port=9092, topic="requests",
+                   schema=schema, process_batch=process_batch_partial,
+                   columns=["id", "city", "street", "floor", "rooms"])
 
 
-def run_kafka_consumer():
-    while True:
-        start_kafka_consumer()
-        time.sleep(60)
-
-
-@app.route('/predict', methods=['POST'])
-def predict_route():
-    return True
+@app.route('/status', methods=['GET'])
+def status():
+    return jsonify({'message': 'Service is running'})
 
 
 if __name__ == "__main__":
-    logger = create_logger()
-    spark = create_spark_session(app_name="ModelApplication")
-    thread = threading.Thread(target=run_kafka_consumer)
-    thread.start()
-    model_path = "../models"
-    app.run(debug=True, port=5001)
+        logger = create_logger()
+        spark = create_spark_session(app_name="DataLoader")
+        scheduler = BackgroundScheduler()
+        loaded_model = load_model(path="models")
+        process_batch_partial = partial(process_batch, loaded_model=loaded_model)
+        start_kafka_consumer_partial = partial(start_kafka_consumer, spark_session=spark, loaded_model=loaded_model)
+        scheduler.add_job(func=start_kafka_consumer_partial, trigger="interval", seconds=60)
+        scheduler.start()
+
+        app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8083)
+

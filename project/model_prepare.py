@@ -113,6 +113,6 @@ if __name__ == "__main__":
           .drop('key', 'created_at')
           )
     prepared_model = train_model(dataframe=df)
-    path = "models"
+    path = "model_application/models"
     prepared_model.write().overwrite().save(path)
     spark.stop()
