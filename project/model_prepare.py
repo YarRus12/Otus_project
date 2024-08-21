@@ -115,4 +115,5 @@ if __name__ == "__main__":
     prepared_model = train_model(dataframe=df)
     path = "model_application/models"
     prepared_model.write().overwrite().save(path)
+    logger.info(f"Model was saved to {path}")
     spark.stop()
