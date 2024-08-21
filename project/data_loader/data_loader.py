@@ -1,3 +1,4 @@
+import os
 import time
 from functools import partial
 
@@ -8,8 +9,10 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 from flask import Flask, jsonify
 
-from project.utils import write_to_psql, create_logger, create_spark_session, kafka_consumer
-
+try:
+    from utils import write_to_psql, create_logger, create_spark_session, kafka_consumer
+except ModuleNotFoundError:
+    from .utils import write_to_psql, create_logger, create_spark_session, kafka_consumer
 
 def process_batch(df: DataFrame, epoch_id) -> None:
     """
@@ -20,8 +23,9 @@ def process_batch(df: DataFrame, epoch_id) -> None:
     :return: None
     """
     columns = ["city", "street", "floor", "rooms", "price"]
-    message = write_to_psql(df=df, table_name="STAGE.FLATS_TABLE", columns=columns)
+    message = write_to_psql(df=df.cache(), table_name="STAGE.FLATS_TABLE", columns=columns)
     logger.info(message)
+    df.unpersist()
 
 
 app = Flask(__name__)
@@ -37,8 +41,8 @@ def start_kafka_consumer(spark_session: SparkSession):
         StructField("rooms", IntegerType(), True),
         StructField("price", LongType(), True)
     ])
-    kafka_consumer(spark_session=spark_session, host="localhost",
-                   port=9092, topic="new_data", schema=schema,
+    kafka_consumer(spark_session=spark_session, host=os.getenv('KAFKA_HOST', 'localhost'),
+                   port=os.getenv('KAFKA_PORT', 9092), topic="new_data", schema=schema,
                    columns=["id", "city", "street", "floor", "rooms", "price"],
                    process_batch=process_batch)
 
@@ -53,7 +57,7 @@ if __name__ == "__main__":
         spark = create_spark_session(app_name="DataLoader")
         scheduler = BackgroundScheduler()
         start_kafka_consumer_partial = partial(start_kafka_consumer, spark_session=spark)
-        scheduler.add_job(func=start_kafka_consumer_partial, trigger="interval", seconds=20)
+        scheduler.add_job(func=start_kafka_consumer_partial, trigger="interval", seconds=60)
         scheduler.start()
 
-        app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8082)
+        app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8085)

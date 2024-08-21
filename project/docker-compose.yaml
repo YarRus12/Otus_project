@@ -97,13 +97,15 @@ services:
     ports:
       - "8081:8081"
     environment:
+      KAFKA_HOST: kafka
+      KAFKA_PORT: 29092
       FLASK_APP: producer_emulator.py
       FLASK_RUN_PORT: 8081
       FLASK_RUN_HOST: 0.0.0.0
       FLASK_ENV: development
       FLASK_APP_DIR: /app
       HOST: database
-      PORT: 5435
+      PORT: 5432
       DB: docker_app_db
       DB_USERNAME: docker_app
       POSTGRES_PASSWORD: docker_app
@@ -112,69 +114,73 @@ services:
       interval: 5s
       timeout: 5s
       retries: 3
-    command: ["sh", "-c", "ls -l /app && ls -l /app/utils.py && flask run --host=0.0.0.0"]
+    command: ["python3", "producer_emulator.py"]
 
-#  data_loader:
-#    build:
-#      context: ./
-#      dockerfile: ./data_loader/Dockerfile
-#    container_name: data_loader
-#    depends_on:
-#      - database
-#      - kafka
-#    networks:
-#      - general_net
-#      - kafka_network
-#    ports:
-#      - "8082:8082"
-#    environment:
-#      FLASK_APP: data_loader.py
-#      FLASK_RUN_PORT: 8082
-#      FLASK_RUN_HOST: 0.0.0.0
-#      FLASK_ENV: development
-#      FLASK_APP_DIR: /app
-#      HOST: database
-#      PORT: 5435
-#      DB: docker_app_db
-#      DB_USERNAME: docker_app
-#      POSTGRES_PASSWORD: docker_app
-#    healthcheck:
-#      test: [ "CMD", "curl", "localhost:8082/status" ]
-#      interval: 5s
-#      timeout: 5s
-#      retries: 3
-#    command: [ "sh", "-c", "ls -l /app && ls -l /app/utils.py && flask run --host=0.0.0.0" ]
-#
-#  model_application:
-#    build:
-#      context: ./
-#      dockerfile: ./model_application/Dockerfile
-#    container_name: model_application
-#    depends_on:
-#      - database
-#      - kafka
-#    networks:
-#      - general_net
-#      - kafka_network
-#    ports:
-#      - "8083:8083"
-#    environment:
-#      FLASK_APP: model_application.py
-#      FLASK_RUN_PORT: 8083
-#      FLASK_RUN_HOST: 0.0.0.0
-#      FLASK_ENV: development
-#      FLASK_APP_DIR: /app
-#      HOST: database
-#      PORT: 5435
-#      DB: docker_app_db
-#      DB_USERNAME: docker_app
-#      POSTGRES_PASSWORD: docker_app
-#    healthcheck:
-#      test: [ "CMD", "curl", "localhost:8083/status" ]
-#      interval: 5s
-#      timeout: 5s
-#      retries: 3
-#    command: [ "sh", "-c", "ls -l /app && ls -l /app/utils.py && flask run --host=0.0.0.0" ]
+  data_loader:
+    build:
+      context: ./
+      dockerfile: ./data_loader/Dockerfile
+    container_name: data_loader
+    depends_on:
+      - database
+      - kafka
+    networks:
+      - general_net
+      - kafka_network
+    ports:
+      - "8082:8082"
+    environment:
+      KAFKA_HOST: kafka
+      KAFKA_PORT: 29092
+      FLASK_APP: producer_emulator.py
+      FLASK_RUN_PORT: 8082
+      FLASK_RUN_HOST: 0.0.0.0
+      FLASK_ENV: development
+      FLASK_APP_DIR: /app
+      HOST: database
+      PORT: 5432
+      DB: docker_app_db
+      DB_USERNAME: docker_app
+      POSTGRES_PASSWORD: docker_app
+    healthcheck:
+      test: [ "CMD", "curl", "localhost:8082/status" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    command: ["python3", "data_loader.py"]
+
+  model_application:
+    build:
+      context: ./
+      dockerfile: ./model_application/Dockerfile
+    container_name: model_application
+    depends_on:
+      - database
+      - kafka
+    networks:
+      - general_net
+      - kafka_network
+    ports:
+      - "8083:8083"
+    environment:
+      KAFKA_HOST: kafka
+      KAFKA_PORT: 29092
+      FLASK_APP: producer_emulator.py
+      FLASK_RUN_PORT: 8082
+      FLASK_RUN_HOST: 0.0.0.0
+      FLASK_ENV: development
+      FLASK_APP_DIR: /app
+      HOST: database
+      PORT: 5432
+      DB: docker_app_db
+      DB_USERNAME: docker_app
+      POSTGRES_PASSWORD: docker_app
+    healthcheck:
+      test: [ "CMD", "curl", "localhost:8083/status" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    command: ["python3", "model_application.py"]
 
 networks:
   general_net:

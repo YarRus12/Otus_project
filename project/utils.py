@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 
 from pyspark import SparkConf
@@ -76,21 +77,23 @@ def write_to_psql(df: DataFrame, table_name: str, columns: list) -> str:
     :param df: данные о квартирах
     :return: message: сообщение о выполнении
     """
-    host = 'localhost'
-    port = 5435
-    database = 'docker_app_db'
+    host = os.getenv("HOST", 'localhost')
+    port = os.getenv("PORT", 5435)
+    database = os.getenv("DB", 'docker_app_db')
+    user = os.getenv("DB_USERNAME", 'docker_app')
+    password = os.getenv("POSTGRES_PASSWORD", 'docker_app')
     num_rows = df.count()
 
     df = df.select(*columns).withColumn('created_at', current_date())
-
+    df.show()
     (df
      .write
      .format("jdbc")
      .mode("append")
      .option("dbtable", table_name)
      .option("url", f"jdbc:postgresql://{host}:{port}/{database}")
-     .option("user", "docker_app")
-     .option("password", "docker_app")
+     .option("user", user)
+     .option("password", password)
      .option("driver", "org.postgresql.Driver")
      .save())
 

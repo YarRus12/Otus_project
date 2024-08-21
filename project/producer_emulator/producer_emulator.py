@@ -1,4 +1,5 @@
-from functools import partial  
+import os
+from functools import partial
 from typing import Generator
 import schedule
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -8,7 +9,11 @@ from pyspark.sql.types import StructType, StringType, StructField, IntegerType
 import random
 import requests
 from flask import Flask, jsonify
-from project.utils import producer_to_kafka, create_logger, create_spark_session
+
+try:
+    from utils import producer_to_kafka, create_logger, create_spark_session
+except ModuleNotFoundError:
+    from .utils import producer_to_kafka, create_logger, create_spark_session
 
 
 def get_streets_names() -> list:
@@ -110,7 +115,8 @@ def generate_and_produce_new_data(spark_session: SparkSession):
     record_num = random.randint(20, 100)
     generated_df = create_data(spark_session=spark_session, cities=cities_names,
                                streets=streets_names, record_num=record_num)
-    message = producer_to_kafka(data=generated_df, topic="new_data", host="localhost", port=9092, logger=logger)
+    message = producer_to_kafka(data=generated_df, topic="new_data", host=os.getenv('KAFKA_HOST', 'localhost'),
+                                port=os.getenv('KAFKA_PORT', 9092), logger=logger)
     logger.info(message)
 
 
@@ -119,7 +125,7 @@ schedule.every(120).seconds.do(generate_and_produce_new_data)
 
 @app.route('/generate_and_produce_requests', methods=['GET'])
 def generate_and_produce_requests(spark_session: SparkSession):
-    logger.info("Запуск генерации запросов")
+    logger.info("Запуск генерации данных для исскуственных запросов")
     streets_names = get_streets_names()
     if streets_names is None:
         logger.error("Mockaroo API error")
@@ -130,7 +136,8 @@ def generate_and_produce_requests(spark_session: SparkSession):
                                 streets=streets_names, record_num=record_num)
                     .select("id", "city", "street", "floor", "rooms")
                     )
-    message = producer_to_kafka(data=generated_df, topic="requests", host="localhost", port=9092, logger=logger)
+    message = producer_to_kafka(data=generated_df, topic="requests", host=os.getenv('KAFKA_HOST', 'localhost'),
+                                port=os.getenv('KAFKA_PORT', 9092), logger=logger)
     logger.info(message)
 
 
@@ -150,4 +157,4 @@ if __name__ == "__main__":
     scheduler.add_job(func=generate_and_produce_requests_partial, trigger="interval", seconds=30)
     scheduler.start()
     logger.info(f"Scheduled jobs: {scheduler.get_jobs()}")
-    app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8081)
+    app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8084)
