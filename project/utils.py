@@ -1,7 +1,6 @@
 import logging
 import os
 from datetime import datetime
-
 from pyspark import SparkConf
 from pyspark.sql.functions import to_json, struct, col, from_json, current_date
 from pyspark.sql import SparkSession, DataFrame
@@ -10,24 +9,17 @@ from pyspark.sql.types import StructType
 
 def create_logger() -> logging.Logger:
     """
-    Создает логгер
+    Создает логгер, устанавливает уровень логгирования и формирует формат вывода
 
     :return: логгер
     """
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)  # Установите максимальный уровень логирования на DEBUG
-
-    # Создайте обработчик для консоли и установите уровень на debug
+    logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
 
-    # Создайте форматтер
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    # Добавьте форматтер к ch
     ch.setFormatter(formatter)
-
-    # Добавьте ch к логгеру
     logger.addHandler(ch)
 
     return logger
@@ -85,7 +77,6 @@ def write_to_psql(df: DataFrame, table_name: str, columns: list) -> str:
     num_rows = df.count()
 
     df = df.select(*columns).withColumn('created_at', current_date())
-    df.show()
     (df
      .write
      .format("jdbc")
@@ -101,13 +92,26 @@ def write_to_psql(df: DataFrame, table_name: str, columns: list) -> str:
     return message
 
 
-def kafka_consumer(spark_session,
+def kafka_consumer(spark_session: SparkSession,
                    host: str,
                    port: int,
                    topic: str,
                    schema: StructType,
                    columns: list,
                    process_batch: callable) -> None:
+    """
+    Функция принимает данные из Kafka и обрабатывает их в функции обработки пакета
+
+    :param spark_session: спарк-сессия
+    :param host: хост Kafka
+    :param port: порт Kafka
+    :param topic: топик Kafka
+    :param schema: схема данных
+    :param columns: колонки df
+    :param process_batch: функция обработки пакета
+    :return: None
+    """
+
     kafka_options = {
         "kafka.bootstrap.servers": f"{host}:{port}",
         "topic": topic
@@ -133,17 +137,26 @@ def kafka_consumer(spark_session,
     query.awaitTermination()
 
 
-def get_data_psql(spark_session: SparkSession) -> DataFrame:
-    host = 'localhost'
-    port = 5435
-    database = 'docker_app_db'
-    table_name = "STAGE.FLATS_TABLE"
+def get_data_psql(spark_session: SparkSession, table_name: str) -> DataFrame:
+    """
+    Функция принимает данные из PostgreSQL и обрабатывает их
+
+    :param spark_session:
+    :param table_name:
+    :return:
+    """
+    host = os.getenv("HOST", 'localhost')
+    port = os.getenv("PORT", 5435)
+    database = os.getenv("DB", 'docker_app_db')
+    user = os.getenv("DB_USERNAME", 'docker_app')
+    password = os.getenv("POSTGRES_PASSWORD", 'docker_app')
+
     pg_df = (spark_session.read
              .format("jdbc")
              .option("dbtable", table_name)
              .option("url", f"jdbc:postgresql://{host}:{port}/{database}")
-             .option("user", "docker_app")
-             .option("password", "docker_app")
+             .option("user", user)
+             .option("password", password)
              .option("driver", "org.postgresql.Driver")
              .load()
              )
@@ -152,6 +165,11 @@ def get_data_psql(spark_session: SparkSession) -> DataFrame:
 
 
 def spark_configs() -> SparkConf:
+    """
+    Функция возвращает SparkConf с конфигурационными настройками Spark
+
+    :return: SparkConf
+    """
     spark_jars_packages = ",".join(
         [
             "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0",
@@ -167,7 +185,11 @@ def spark_configs() -> SparkConf:
 
 
 def create_spark_session(app_name: str) -> SparkSession:
-    """Функция создает SparkSession"""
+    """Функция создает SparkSession
+
+    :param app_name: название приложения
+    :return: SparkSession
+    """
     spark = (SparkSession.builder
              .appName(app_name)
              .config(conf=spark_configs())

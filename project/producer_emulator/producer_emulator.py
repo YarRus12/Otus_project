@@ -1,15 +1,16 @@
 import os
-from functools import partial
-from typing import Generator
 import schedule
-from apscheduler.schedulers.background import BackgroundScheduler
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import monotonically_increasing_id
-from pyspark.sql.types import StructType, StringType, StructField, IntegerType
 import random
 import requests
 from flask import Flask, jsonify
+from apscheduler.schedulers.background import BackgroundScheduler
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import monotonically_increasing_id
+from pyspark.sql.types import StructType, StringType, StructField, IntegerType
+from functools import partial
+from typing import Generator
 
+# Обработка ошибки при запуске в docker
 try:
     from utils import producer_to_kafka, create_logger, create_spark_session
 except ModuleNotFoundError:
@@ -24,7 +25,7 @@ def get_streets_names() -> list:
     """
     url = "https://my.api.mockaroo.com/otus_api.json"
     headers = {
-        "X-API-Key": "045554c0",  # это следовало бы поместить в переменную окружения
+        "X-API-Key": "045554c0",  # это следовало бы поместить в переменную окружения, но нет
         "Content-Type": "applications/json",
     }
     response = requests.get(url, headers=headers)
@@ -78,7 +79,7 @@ def generate_random_data(record_num, cities: list, streets: list) -> Generator:
         }
 
 
-def create_data(spark_session: SparkSession, cities: list, streets: list, record_num: int):
+def create_data(spark_session: SparkSession, cities: list, streets: list, record_num: int) -> DataFrame:
     """
     Создаем DataFrame с данными
 
@@ -142,7 +143,12 @@ def generate_and_produce_requests(spark_session: SparkSession):
 
 
 @app.route('/status', methods=['GET'])
-def status():
+def status() -> jsonify:
+    """
+    Вспомогательная функция для проверки работоспособности сервиса в логах контейнера
+
+    :return: jsonify: Сообщение о состоянии сервиса
+    """
     return jsonify({'message': 'Service is running'})
 
 
@@ -156,5 +162,5 @@ if __name__ == "__main__":
     generate_and_produce_requests_partial = partial(generate_and_produce_requests, spark_session=spark)
     scheduler.add_job(func=generate_and_produce_requests_partial, trigger="interval", seconds=30)
     scheduler.start()
-    logger.info(f"Scheduled jobs: {scheduler.get_jobs()}")
+
     app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8084)

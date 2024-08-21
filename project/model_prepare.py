@@ -107,7 +107,7 @@ if __name__ == "__main__":
     running_date = datetime.now().date()
     spark = create_spark_session(app_name="ModelPrepare")
 
-    df = get_data_psql(spark_session=spark)
+    df = get_data_psql(spark_session=spark, table_name = "STAGE.FLATS_TABLE")
     df = (df.filter(col('created_at') >= running_date-timedelta(weeks=4))
           .filter(col('city').isNotNull() & col('street').isNotNull())
           .drop('key', 'created_at')

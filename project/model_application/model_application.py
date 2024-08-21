@@ -1,8 +1,5 @@
 import os
-import threading
-import time
 from functools import partial
-
 from apscheduler.schedulers.background import BackgroundScheduler
 from pyspark.ml import PipelineModel
 from pyspark.ml.feature import StringIndexer, VectorAssembler
@@ -10,6 +7,7 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 from flask import Flask, jsonify
 
+# Обработка ошибки при запуске в docker
 try:
     from utils import producer_to_kafka, create_logger, create_spark_session, kafka_consumer, write_to_psql
 except ModuleNotFoundError:
@@ -17,12 +15,24 @@ except ModuleNotFoundError:
 
 
 
-def load_model(path) -> PipelineModel:
+def load_model(path: str) -> PipelineModel:
+    """
+    Загрузка модели
+
+    :param path: путь к модели
+    :return: модель
+    """
     return PipelineModel.load(path)
 
 
-def execute_model(loaded_model:PipelineModel, dataframe: DataFrame) -> DataFrame:
+def execute_model(model:PipelineModel, dataframe: DataFrame) -> DataFrame:
+    """
+    Применение модели к данным
 
+    :param model: применяемая модель
+    :param dataframe: данные из пакета
+    :return: расчитанные значения предсказаний
+    """
     # Подтверждение успешной загрузки
     logger.info("Model loaded successfully")
     # Apply the same transformations as during training
@@ -44,7 +54,7 @@ def execute_model(loaded_model:PipelineModel, dataframe: DataFrame) -> DataFrame
     final_df = assembler.transform(indexed_df)
 
     # Now you can use the loaded model to make predictions
-    result = loaded_model.transform(final_df)
+    result = model.transform(final_df)
     return result.select("id", "prediction")
 
 
@@ -57,7 +67,7 @@ def process_batch(dataframe: DataFrame, epoch_id, model: PipelineModel) -> None:
     :param epoch_id:
     :return: None
     """
-    result = execute_model(dataframe=dataframe, loaded_model=model).cache()
+    result = execute_model(dataframe=dataframe, model=model).cache()
     message = producer_to_kafka(data=result, topic="answers", host=os.getenv('KAFKA_HOST', 'localhost'),
                                 port=os.getenv('KAFKA_PORT', 9092), logger=logger)
     logger.info(message)
@@ -71,7 +81,13 @@ def process_batch(dataframe: DataFrame, epoch_id, model: PipelineModel) -> None:
 app = Flask(__name__)
 
 
-def start_kafka_consumer(spark_session: SparkSession):
+def start_kafka_consumer(spark_session: SparkSession) -> None:
+    """
+    Запуск обработчика Kafka
+
+    :param spark_session: спарк-сессия
+    :return: None
+    """
     schema = StructType([
         StructField("id", LongType(), True),
         StructField("city", StringType(), True),
@@ -86,7 +102,12 @@ def start_kafka_consumer(spark_session: SparkSession):
 
 
 @app.route('/status', methods=['GET'])
-def status():
+def status() -> jsonify:
+    """
+    Вспомогательная функция для проверки работоспособности сервиса в логах контейнера
+
+    :return: jsonify: Сообщение о состоянии сервиса
+    """
     return jsonify({'message': 'Service is running'})
 
 
@@ -101,4 +122,3 @@ if __name__ == "__main__":
         scheduler.start()
 
         app.run(debug=True, host='0.0.0.0', use_reloader=True, port=8083)
-

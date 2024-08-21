@@ -1,14 +1,11 @@
 import os
-import time
 from functools import partial
-
-import pyspark
-import schedule
 from apscheduler.schedulers.background import BackgroundScheduler
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 from flask import Flask, jsonify
 
+# Обработка ошибки при запуске в docker
 try:
     from utils import write_to_psql, create_logger, create_spark_session, kafka_consumer
 except ModuleNotFoundError:
@@ -32,7 +29,13 @@ app = Flask(__name__)
 
 
 @app.route('/start_kafka_consumer', methods=['GET'])
-def start_kafka_consumer(spark_session: SparkSession):
+def start_kafka_consumer(spark_session: SparkSession) -> None:
+    """
+    Запуск обработчика Kafka
+
+    :param spark_session: спарк-сессия
+    :return: None
+    """
     schema = StructType([
         StructField("id", LongType(), True),
         StructField("city", StringType(), True),
@@ -47,7 +50,12 @@ def start_kafka_consumer(spark_session: SparkSession):
                    process_batch=process_batch)
 
 @app.route('/status', methods=['GET'])
-def status():
+def status() -> jsonify:
+    """
+    Вспомогательная функция для проверки работоспособности сервиса в логах контейнера
+
+    :return: jsonify: Сообщение о состоянии сервиса
+    """
     return jsonify({'message': 'Service is running'})
 
 
